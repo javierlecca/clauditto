@@ -1,0 +1,21 @@
+node_modules/
+out/
+dist/
+dist-win/
+*.log
+.worktrees/
+.superpowers/
+.DS_Store
+# Separate marketing-video tooling (Remotion project + rendered mp4s) --
+# not part of the app itself; lives here for convenience but doesn't
+# belong in the app's own portfolio history (1GB+ of rendered video).
+video/
+docs/superpowers
+# Build output of `npm run build:mcp-bridge` (esbuild-bundled copy of
+# resources/mcp-bridge/dispatch-bridge.cjs, made for packaging -- the
+# source file itself stays tracked) -- see pack:mac's own comment.
+resources/mcp-bridge-dist/
+
+# Stray debris from an environment-variable bug (a literal "undefined" path) -- not project content.
+undefined/
+SESSION_STATE.md

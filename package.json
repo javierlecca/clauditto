@@ -1,0 +1,71 @@
+{
+  "name": "clauditto",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clauditto -- desktop dashboard for local Claude Code sessions",
+  "author": "Javier Lecca Cruzado",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/javierlecca/clauditto.git"
+  },
+  "main": "out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/fix-node-pty-perms.js",
+    "rebuild:electron": "electron-rebuild -f -w node-pty,better-sqlite3",
+    "rebuild:node": "npm rebuild node-pty better-sqlite3",
+    "dev": "npm run rebuild:electron && electron-vite dev",
+    "build": "npm run rebuild:electron && electron-vite build",
+    "start": "electron-vite preview",
+    "test": "npm run rebuild:node && vitest run",
+    "build:mcp-bridge": "esbuild resources/mcp-bridge/dispatch-bridge.cjs --bundle --platform=node --format=cjs --outfile=resources/mcp-bridge-dist/dispatch-bridge.cjs",
+    "pack:mac": "npm run build && npm run build:mcp-bridge && electron-builder --mac --dir --arm64",
+    "dist:mac": "npm run build && npm run build:mcp-bridge && electron-builder --mac --arm64",
+    "dist:win": "npm run build && npm run build:mcp-bridge && electron-builder --win"
+  },
+  "build": {
+    "appId": "com.javier.clauditto",
+    "productName": "Clauditto",
+    "files": [
+      "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/mcp-bridge-dist",
+        "to": "mcp-bridge"
+      }
+    ],
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "better-sqlite3": "13.0.3",
+    "node-pty": "1.1.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "4.2.0",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "22.20.2",
+    "electron": "44.3.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "5.0.0",
+    "esbuild": "^0.25.12",
+    "javascript-obfuscator": "^5.8.1",
+    "jsdom": "^29.1.1",
+    "typescript": "7.0.2",
+    "vite": "7.3.6",
+    "vitest": "5.0.0"
+  }
+}

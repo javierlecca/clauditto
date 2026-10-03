@@ -1,0 +1,1464 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #1e1e2e;
+  color: #e0e0e0;
+}
+
+#app {
+  padding: 16px;
+}
+
+/* Self-hosted (not a Google Fonts CDN link) so the splash screen -- the
+   very first thing shown, before this app has done anything that would
+   need network access at all -- never depends on being online. Press
+   Start 2P, SIL Open Font License 1.1. */
+@font-face {
+  font-family: 'Press Start 2P';
+  src: url('./assets/fonts/PressStart2P-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+/* Shown once, at boot, before the real dashboard (see showSplashScreen
+   in main.ts) -- fixed/full-viewport so it sits on top of and hides
+   whatever #app is doing underneath while sessions are still loading.
+   Deliberately plain white (not this app's own dark theme) -- a mobile-
+   app-style splash screen, which this is deliberately imitating, reads
+   as a brand moment distinct from the product itself, not as "the app
+   with the lights off". */
+.splash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+}
+
+/* Holds a repeating row of .splash-logo, filled edge-to-edge by
+   showSplashScreen (JS computes how many fit the row's own actual
+   width, since CSS alone can't say "repeat exactly enough to fill this
+   row, no wrapping, no cutting one off") -- confirmed by direct user
+   request for "más Claudittos en el ancho del contenedor" instead of the
+   one, previously oversized, single logo. align-self: stretch overrides
+   .splash-screen's own align-items: center (which would otherwise shrink
+   this to its content width, same as .splash-name deliberately still
+   does below it). */
+.splash-logo-row {
+  display: flex;
+  align-self: stretch;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+}
+
+/* Same sprite as the header's .brand-logo, one fixed size now that
+   there's a whole row of these instead of one giant centerpiece --
+   but NOT animated via CSS `animation` the way that one is. Confirmed
+   by repeated direct user report: N independent `animation: ... infinite`
+   instances (even with no per-element delay, which was the first fix
+   tried) still drifted out of phase with each other over time, each
+   showing a different pose at once instead of the identical one. Their
+   background-position-x is instead set directly, in lockstep, from one
+   shared setInterval in showSplashScreen -- see that function's own
+   comment. */
+.splash-logo {
+  flex: 0 0 auto;
+  width: 100px;
+  height: 100px;
+  background-repeat: no-repeat;
+  background-size: 2100px 100px;
+  background-position-x: 0;
+}
+
+.splash-name {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(1.4em, 3.2vw, 3.2em);
+  /* Anthropic's own signature orange accent (confirmed: #D97757) --
+     Claude Code's own color, not a guess. */
+  color: #d97757;
+  /* Pixel fonts are drawn at a fixed native size -- letting the browser
+     smooth/anti-alias a scaled-up render would defeat the point of using
+     one at all. */
+  image-rendering: pixelated;
+}
+
+.brand-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+/* clauditto-idle.png: one continuous 21-frame strip (7 + 6 + 8 frames
+   from a fuller "complete flow" sheet -- more varied poses than the
+   original 3x6 grid this replaced, including some with arms raised or a
+   bigger head, so frames aren't all the same native size). Each frame
+   was cropped to its own real bounding box, then centered on a common
+   115x115 white cell before being placed in the strip -- padding the
+   smaller poses rather than stretching them, so nothing is distorted.
+   That's also why the single, uniform scale factor below (115px ->
+   52px, ~0.452x) works for the whole strip despite the pose variety: by
+   the time they're in this file, every cell is already the same size.
+   Same underlying technique as the office scene's own sprites (see
+   walk-legs/coffee-sip): element size = one frame, background-size =
+   that size times frame count, steps() animation shifts
+   background-position by exactly one frame each step. */
+/* Perfectly static -- the white "sticker card" look (same rounded-corner
+   treatment the original static logo image had) lives here, on an
+   element that never animates, precisely so it never moves. Confirmed
+   directly (user report): putting both the white and the bob animation
+   on the *same* element made the white card itself look like it was
+   hovering, since transform: translateY moves everything painted on
+   that element, background included. Slightly bigger than the sprite it
+   contains (62x60 vs the inner 52x52) so the bob has a few px of room
+   to move within a fixed frame instead of visibly clipping against it;
+   overflow: hidden is a safety net for that, not the primary fix. */
+.brand-logo-badge {
+  width: 62px;
+  height: 60px;
+  background: #fff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.brand-logo {
+  width: 52px;
+  height: 52px;
+  background-repeat: no-repeat;
+  background-size: 1092px 52px;
+  /* clauditto-bob (the continuous up/down float -- see its own
+     @keyframes below) is deliberately OFF right now, at direct request
+     (again -- previously toggled off/on once already; not a decision
+     that it's staying off). Add ", clauditto-bob 2.1s ease-in-out
+     infinite" back to this shorthand to restore it. */
+  animation: clauditto-idle 3.7s steps(21) infinite;
+}
+
+/* Pixel-based, not percentage: background-position-x: 100% resolves to
+   (element width - image width) = -1040px, i.e. 20 frames, so steps(21)
+   over 0%->100% moved ~49.5px per step instead of one 52px frame --
+   showing half of one pose and half of the next. Going to the full strip
+   width (21 x 52px) makes each of the 21 steps land exactly on a frame
+   (steps() never renders the `to` value itself, so the last frame shown
+   is -1040px). Only the header logo (.brand-logo) uses this -- the
+   splash screen drives its frames from JS (see showSplashScreen). */
+@keyframes clauditto-idle {
+  from {
+    background-position-x: 0;
+  }
+  to {
+    background-position-x: -1092px;
+  }
+}
+
+@keyframes clauditto-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.brand-name {
+  font-size: 1.3em;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.nav-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* The room screen's "Gestionar agentes"/"Gestionar sala" pair --
+   without this they sit flush against each other and against the cwd
+   line above with no breathing room, same issue .nav-bar solves for
+   the dashboard's own nav buttons. */
+.room-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+/* Sits between the nav bar and the card grid -- a plain client-side
+   filter over already-rendered cards (see renderSessionList), not a
+   new fetch, so typing here never re-queries the CLI. */
+.room-search {
+  display: block;
+  max-width: 400px;
+  margin: 0 0 16px;
+}
+
+.session-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.session-card {
+  background: #26263c;
+  border-radius: 14px;
+  width: 440px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+
+.card-body {
+  padding: 12px 14px 14px;
+}
+
+.card-body h3 {
+  margin: 0 0 2px;
+  font-size: 1.05em;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.card-title-row h3 {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+/* "This room changed and you haven't opened it since" -- reuses the
+   toast's own per-state background colors (.toast-working etc, applied
+   here alongside this class) so a missed room reads the same color as
+   the toast that reported it. align-self overrides the row's own
+   align-items: baseline, which has no sensible meaning for a plain dot. */
+.card-change-badge {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  align-self: center;
+  flex-shrink: 0;
+  cursor: help;
+}
+
+.edit-name-link {
+  background: none;
+  border: none;
+  color: #8ab4ff;
+  font-size: 0.8em;
+  font-weight: 600;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.edit-name-link:hover {
+  background: none;
+  color: #a9c6ff;
+}
+
+.title-note {
+  font-size: 0.75em;
+  color: #777;
+  flex-shrink: 0;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.rename-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+/* `display: flex` above wins over the `hidden` attribute's own built-in
+   `display: none` (equal specificity, author stylesheet vs. user-agent
+   stylesheet -- author always wins), so every background room's rename
+   row was rendering open at all times, overlapping the title, even
+   though `.hidden` was correctly `true` until "Editar" was clicked. This
+   rule restores the attribute's effect. */
+.rename-row[hidden] {
+  display: none;
+}
+
+.rename-row input {
+  flex: 1;
+  min-width: 120px;
+  margin: 0;
+  padding: 5px 8px;
+  font-size: 1.05em;
+  font-weight: 700;
+  font-family: inherit;
+  color: inherit;
+  background: #1a1a2c;
+  border: 1px solid #55557a;
+  border-radius: 6px;
+}
+
+.rename-row input:focus {
+  outline: none;
+  border-color: #8ab4ff;
+  box-shadow: 0 0 0 2px rgba(138, 180, 255, 0.3);
+}
+
+.rename-row button {
+  padding: 5px 10px;
+  font-size: 0.85em;
+  flex-shrink: 0;
+}
+
+.rename-save {
+  background: #3d5a80;
+  border-color: #4d729f;
+}
+
+.rename-save:hover {
+  background: #4d729f;
+}
+
+.rename-cancel {
+  background: none;
+  border: none;
+  color: #999;
+}
+
+.rename-cancel:hover {
+  background: none;
+  color: #ccc;
+}
+
+.rename-status {
+  margin: 0;
+  width: 100%;
+  font-size: 0.8em;
+  color: #999;
+}
+
+.rename-status.error {
+  color: #f66;
+}
+
+.room-scene {
+  position: relative;
+  height: 230px;
+  /* Wall (pale blue-gray), a thin baseboard trim, then a warm tiled
+     floor -- closer to a real top-down office than a flat two-tone
+     gradient. The floor's crosshatch is two overlaid repeating-linear-
+     gradients simulating tile grout lines; there's no floor-tile asset
+     in the current sprite pack to use as a real texture. */
+  background-color: #6b5a45;
+  background-image: linear-gradient(to bottom, #9db3c2 0%, #9db3c2 36%, #7a5233 36%, #7a5233 39%, transparent 39%),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.08) 0 2px, transparent 2px 18px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.08) 0 2px, transparent 2px 18px),
+    linear-gradient(to bottom, transparent 0%, transparent 39%, #c98a52 39%, #c98a52 100%);
+  image-rendering: pixelated;
+}
+
+/* Closed session, shown "off" right in the main grid: desaturated and
+   dimmed, with every sprite animation frozen -- both the thematic look
+   and a real perf win when several history cards render at once. */
+.room-scene.is-off {
+  filter: grayscale(1) brightness(0.6);
+}
+
+.room-scene.is-off * {
+  animation: none !important;
+}
+
+/* "Prendiendo…" (see waitForResumedSessionLive): the whole card pulses
+   while the room boots up in the background, between clicking "Prender"
+   and the automatic refresh that reveals it as live -- visible feedback
+   for that wait instead of the card just sitting there looking
+   unresponsive. */
+@keyframes card-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.session-card.is-loading {
+  animation: card-pulse 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.room-scene img {
+  position: absolute;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.35));
+}
+
+.room-scene .sprite-writing-table {
+  /* Left side of the wall band, clear of the status dot. */
+  left: 22px;
+  top: 6px;
+  width: 48px;
+  height: 48px;
+}
+
+.room-scene .sprite-sink {
+  left: 76px;
+  top: 10px;
+  width: 32px;
+  height: 32px;
+}
+
+.room-scene .sprite-water-cooler {
+  /* In the gap between the desk cluster and the cabinet. Shifted left
+     (along with the cabinet) to leave the top-right corner clear for
+     the delete icon. */
+  right: 100px;
+  top: 8px;
+  width: 22px;
+  height: 44px;
+}
+
+.room-scene .sprite-cabinet {
+  right: 44px;
+  top: 6px;
+  width: 48px;
+  height: 48px;
+}
+
+/* Back row -- desks, decor -- all raised off the very bottom (bottom:78
+   instead of 6) to leave a genuine front row underneath for the extra
+   bystanders (boss, coffee break, plain workers) without piling
+   everything on top of each other. */
+.room-scene .sprite-coffee-maker {
+  left: 46px;
+  bottom: 78px;
+  width: 50px;
+  height: 50px;
+}
+
+.room-scene .sprite-plant {
+  left: 8px;
+  bottom: 78px;
+  width: 34px;
+  height: 34px;
+}
+
+.room-scene .sprite-plant-back {
+  /* Sits higher up (further from the viewer) above the coffee-maker,
+     reusing the same plant asset -- implies depth without new art. */
+  left: 8px;
+  bottom: 118px;
+  width: 32px;
+  height: 32px;
+}
+
+.room-scene .sprite-plant-corner {
+  right: 8px;
+  bottom: 78px;
+  width: 34px;
+  height: 34px;
+}
+
+.room-scene .sprite-printer {
+  right: 46px;
+  bottom: 78px;
+  width: 44px;
+  height: 22px;
+}
+
+/* Each desk is one element animated straight off Julia_PC's 6-frame
+   sheet (desk + monitor + seated worker, all in one frame) -- a real
+   working loop, not a static icon. `left` is set per-element in JS.
+   Wrapped in a plain positioning container so a chat bubble can float
+   above the sprite's own animated box without inheriting its clipping. */
+.desk-worker {
+  position: absolute;
+  bottom: 78px;
+  width: 62px;
+  height: 62px;
+}
+
+.sprite-desk-worker {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-size: 372px 62px;
+  image-rendering: pixelated;
+  animation: pc-typing 1.4s steps(6) infinite;
+}
+
+@keyframes pc-typing {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -372px 0;
+  }
+}
+
+.chat-bubble {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  animation: bubble-pop 6s ease-in-out infinite;
+}
+
+@keyframes bubble-pop {
+  0%,
+  70% {
+    opacity: 0;
+    transform: translate(-50%, 4px) scale(0.8);
+  }
+  80%,
+  90% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -4px) scale(0.8);
+  }
+}
+
+/* A single character pacing the floor in a loop: one animation steps
+   through the walk-cycle frames, a second slides it back and forth
+   (slowly -- an unhurried stroll, not a sprint), and a third flips it
+   horizontally at each turn so it still faces the way it's walking
+   (only one direction of sprite sheet is needed). */
+.sprite-walker {
+  position: absolute;
+  /* In the gap between the new front row (bystanders, bottom 4-42) and
+     the back row (desks, bottom 78+) -- "camina arriba en la parte del
+     piso", not right at the front edge, and clear of both rows. */
+  bottom: 42px;
+  width: 34px;
+  height: 34px;
+  background-repeat: no-repeat;
+  background-size: 136px 34px;
+  image-rendering: pixelated;
+  animation: walk-legs 1.1s steps(4) infinite, walk-across 14s ease-in-out infinite, walk-turn 14s steps(2) infinite;
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.35));
+}
+
+@keyframes walk-legs {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -136px 0;
+  }
+}
+
+/* Front row: extra bystanders below the desks, closer to the viewer. */
+.room-scene .sprite-boss {
+  left: 8px;
+  bottom: 4px;
+  width: 38px;
+  height: 38px;
+}
+
+.sprite-coffee-drinker {
+  position: absolute;
+  left: 52px;
+  bottom: 4px;
+  width: 32px;
+  height: 32px;
+  background-repeat: no-repeat;
+  background-size: 96px 32px;
+  image-rendering: pixelated;
+  animation: coffee-sip 1.8s steps(3) infinite;
+  filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.35));
+}
+
+@keyframes coffee-sip {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -96px 0;
+  }
+}
+
+.room-scene .sprite-front-worker-1 {
+  left: 150px;
+  bottom: 4px;
+  width: 36px;
+  height: 36px;
+}
+
+.room-scene .sprite-front-worker-2 {
+  left: 230px;
+  bottom: 4px;
+  width: 36px;
+  height: 36px;
+}
+
+.room-scene .sprite-front-worker-3 {
+  left: 320px;
+  bottom: 4px;
+  width: 36px;
+  height: 36px;
+}
+
+@keyframes walk-across {
+  0%,
+  100% {
+    left: 16px;
+  }
+  50% {
+    left: 382px;
+  }
+}
+
+@keyframes walk-turn {
+  0%,
+  49.9% {
+    transform: scaleX(1);
+  }
+  50%,
+  99.9% {
+    transform: scaleX(-1);
+  }
+}
+
+.room-status-dot {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.35);
+  background: #888;
+}
+
+.card-delete-icon {
+  position: absolute;
+  /* A bit further from the corner than a plain 6px inset -- right at the
+     card's own rounded corner, the icon was getting clipped by the
+     border-radius curve. */
+  top: 8px;
+  right: 19px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  overflow: hidden;
+  background: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  opacity: 0.85;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.card-delete-icon img {
+  /* This <img> lives inside .room-scene, so it also matches the generic
+     `.room-scene img` rule (position: absolute, image-rendering:
+     pixelated, a drop-shadow filter) at equal specificity -- explicitly
+     overriding all three here, not just the ones this rule cares about,
+     so it doesn't inherit a stray `position: absolute` with no inset
+     (which was pulling it off to an arbitrary static-position offset
+     instead of actually filling the button). */
+  position: static;
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: none;
+  /* The icon is a flat red-circle-with-white-trash-can graphic, already
+     colored (no filter needed) -- but it's a JPG, which has no alpha
+     channel, so the square corners outside the circle render solid
+     white. Cropping to a circle via the button's own border-radius +
+     overflow:hidden (above) hides those corners instead. Not pixel art,
+     so no `image-rendering: pixelated` here either -- let it scale down
+     smoothly like the flat icon it is. */
+  image-rendering: auto;
+  object-fit: cover;
+}
+
+.card-delete-icon:hover {
+  background: none;
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+.room-status-dot.status-idle { background: #6c9; }
+.room-status-dot.status-busy { background: #fc6; }
+.room-status-dot.status-failed { background: #f66; }
+
+.cwd {
+  color: #999;
+  font-size: 0.85em;
+  margin: 0 0 10px;
+}
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.avatar-stack {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  display: flex;
+}
+
+.avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #1a1a2c;
+  margin-left: -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65em;
+  font-weight: 600;
+  color: #1e1e2e;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.avatar:first-child {
+  margin-left: 0;
+}
+
+.avatar-overflow {
+  background: #55557a;
+  color: #e0e0e0;
+  font-size: 0.6em;
+}
+
+.enter-link {
+  background: none;
+  border: none;
+  color: #8ab4ff;
+  font-weight: 600;
+  padding: 4px 2px;
+  white-space: nowrap;
+}
+
+.enter-link:hover {
+  background: none;
+  color: #a9c6ff;
+}
+
+/* Amber like .stop-link/.toast-blocked -- same "needs attention" color
+   language as the blocked-state toast/badge this button sits next to. */
+.peek-blocked-link {
+  background: none;
+  border: none;
+  color: #d9a84e;
+  font-weight: 600;
+  padding: 4px 2px;
+  white-space: nowrap;
+}
+
+.peek-blocked-link:hover {
+  background: none;
+  color: #f0c070;
+}
+
+/* Same solid-button shape as .danger-button (border/padding/radius
+   inherited from the base button rule), just amber instead of red --
+   "Apagar" reads as a real, deliberate action now instead of a quiet
+   text link next to "Eliminar sala"'s full button. */
+.stop-link {
+  background: #7a5a2e;
+  border-color: #a3803d;
+  color: #e0e0e0;
+  font-weight: 600;
+}
+
+.stop-link:hover {
+  background: #95702f;
+}
+
+.status-idle { color: #6c9; }
+.status-busy { color: #fc6; }
+
+.error {
+  color: #f66;
+}
+
+/* An expected, informational state -- not a failure -- so it shouldn't
+   read as alarming the way .error's red does. Used for the "terminal is
+   open, so rename/dispatch is hidden" notice, which is normal while the
+   terminal toggle is on, not something gone wrong. */
+.info-note {
+  color: #8ab4ff;
+}
+
+button {
+  background: #3d3d5c;
+  color: #e0e0e0;
+  border: 1px solid #55557a;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+button:hover {
+  background: #4d4d70;
+}
+
+.danger-button {
+  background: #7a2e2e;
+  border-color: #a33d3d;
+}
+
+.danger-button:hover {
+  background: #953838;
+}
+
+/* Real height is set inline by mountTerminal's resizeTerminalContainer
+   (fills to the bottom of the window) -- this is just the floor for
+   before that first runs, or if the window is too short for its
+   calculation to exceed it. */
+#terminal {
+  min-height: 200px;
+  width: 100%;
+  margin-top: 8px;
+  position: relative;
+}
+
+/* Explicit scroll affordance -- xterm.js repaints its buffer
+   internally instead of growing a real DOM scrollHeight, so the
+   native OS scrollbar thumb never appears here even though mouse-wheel
+   scrolling itself works underneath. Floats over the top-right corner
+   of the terminal, semi-transparent so it doesn't hide content. */
+.terminal-scroll-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 5;
+}
+
+.terminal-scroll-btn {
+  background: rgba(61, 61, 92, 0.8);
+  border: 1px solid #55557a;
+  color: #e0e0e0;
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-size: 0.75em;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.terminal-scroll-btn:hover {
+  background: rgba(80, 80, 116, 0.95);
+}
+
+/* The "@" mention popup: takes over while composing a roster mention
+   (see mountTerminal's interceptAtMention) -- anchored to the bottom of
+   the terminal box rather than tracking the real cursor position
+   (simpler, and the terminal's own cursor is frozen mid-composition
+   anyway since we're not forwarding keystrokes to the pty yet). */
+.mention-popup {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  max-width: 320px;
+  background: #22222f;
+  border: 1px solid #55557a;
+  border-radius: 6px;
+  padding: 6px;
+  z-index: 20;
+  font-size: 0.85em;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.mention-popup-query {
+  color: #8ab4ff;
+  font-weight: 600;
+  padding: 2px 6px 6px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+.mention-popup-item {
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #e0e0e0;
+}
+
+.mention-popup-item.active {
+  background: #3d3d5c;
+}
+
+.mention-popup-empty {
+  padding: 4px 6px;
+  color: #888;
+  font-style: italic;
+}
+
+
+.peek-list {
+  margin-top: 8px;
+  max-height: 500px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.peek-entry {
+  background: #2a2a3d;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+}
+
+.agent-count {
+  color: #999;
+  font-size: 0.8em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.roster-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.roster-row {
+  background: #2a2a3d;
+  border-radius: 8px;
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Without this, an agent's name sits flush against its own
+   description right below it -- give the name room to breathe before
+   the (often multi-line) description starts. */
+.roster-row strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 1.05em;
+}
+
+.roster-row p.cwd {
+  line-height: 1.5;
+}
+
+/* Editar/Eliminar stacked instead of side by side -- side by side read
+   as one run-on phrase ("Editar Eliminar") at a glance; stacking makes
+   each action its own target and keeps the row from widening. */
+.catalog-row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.delete-link {
+  background: none;
+  border: none;
+  color: #f66;
+  font-weight: 600;
+  padding: 4px 2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.delete-link:hover {
+  background: none;
+  color: #ff8a8a;
+}
+
+/* Groups a "create new X" form visually apart from the list above it --
+   plain stacked inputs directly under the list otherwise read as one
+   continuous block, with no cue where "existing items" ends and
+   "creating a new one" begins. */
+.form-card {
+  background: #22222f;
+  border: 1px solid #3a3a52;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 12px 0;
+  max-width: 420px;
+}
+
+/* A room's "Apagar"/"Eliminar" card -- same shape as .form-card, tinted
+   red so destructive actions read as visually set apart from
+   rename/dispatch/roster, not just another card in the same stack. */
+.danger-zone {
+  border-color: #6b3838;
+  background: #2a2020;
+}
+
+/* A section heading inside a .form-card -- smaller and tighter than the
+   page-level <h3> used elsewhere, so a card with several sub-sections
+   (e.g. "Apagar sala" + "Eliminar sala" sharing one danger-zone card)
+   doesn't read as several stacked unrelated cards. */
+.card-heading {
+  font-size: 0.95em;
+  font-weight: 600;
+  margin: 14px 0 6px;
+}
+
+.card-heading:first-child {
+  margin-top: 0;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: #b8b8d0;
+  margin-top: 10px;
+}
+
+.field-label:first-child {
+  margin-top: 0;
+}
+
+.field-hint {
+  color: #888;
+  font-size: 0.78em;
+  margin: 2px 0 8px;
+}
+
+/* Skills an agent preloads via its own real `skills:` frontmatter (see
+   setupSkillPicker's own comment) -- picked with "#" in the prompt
+   above, shown here as removable chips rather than left as text in the
+   body. Empty (no chips) when nothing's selected -- no placeholder text
+   needed, the hint above the textarea already explains "#". */
+.skill-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+
+.skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #33334a;
+  border: 1px solid #4a4a68;
+  border-radius: 999px;
+  padding: 3px 6px 3px 10px;
+  font-size: 0.82em;
+}
+
+.skill-chip-remove {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 1.1em;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.skill-chip-remove:hover {
+  background: none;
+  color: #e0e0e0;
+}
+
+/* The room's terminal card needs real width for xterm.js -- the default
+   420px cap (sized for name/description forms) would squeeze it. */
+.form-card.wide {
+  max-width: 100%;
+}
+
+.success {
+  color: #6c9;
+}
+
+.catalog-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Same `display` vs. `[hidden]` precedence issue as `.rename-row` above --
+   harmless today only because this container is empty while hidden, but
+   fixed for correctness so it stays harmless if that ever changes. */
+.catalog-list[hidden] {
+  display: none;
+}
+
+textarea {
+  width: 100%;
+  max-width: 400px;
+  background: #1e1e2e;
+  color: #e0e0e0;
+  border: 1px solid #55557a;
+  border-radius: 6px;
+  padding: 8px;
+  font-family: inherit;
+  font-size: 0.9em;
+  box-sizing: border-box;
+  display: block;
+  margin: 8px 0;
+}
+
+/* Agent/skill bodies read like instructions or near-code -- a monospace
+   font and more starting height suit that better than the default
+   proportional font sized for short one-line prompts. */
+.prompt-textarea {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  max-width: 100%;
+}
+
+/* Positioning anchor for the create/edit form's "@" mention popup.
+   "form-" prefixed to avoid colliding with the terminal's own
+   .mention-popup/.mention-popup-item (anchored to the bottom of the
+   terminal box, further up in this file) -- reusing those names once
+   merged both rulesets' declarations and collapsed this popup to ~0
+   height, since the terminal's `bottom: 8px` was never overridden by
+   this one's `top: 100%`. Everything but the positioning here is
+   deliberately copied from that terminal popup's own look (compact
+   box, small font, plain one-line items, same colors) rather than the
+   larger card style used elsewhere in this form, per direct feedback
+   that the original version (full-width rows with a name + description
+   each) looked out of place next to it. */
+.form-mention-wrapper {
+  position: relative;
+}
+
+.form-mention-popup {
+  position: absolute;
+  /* Fallback only -- setupMentionPicker sets real top/left inline,
+     right under wherever the "@" was actually typed (via the caret
+     mirror-div technique), since a textarea can be many lines tall and
+     the "@" is rarely at the very bottom of it. */
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  margin-top: 4px;
+  max-width: 320px;
+  background: #22222f;
+  border: 1px solid #55557a;
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 0.85em;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.form-mention-popup-item {
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #e0e0e0;
+}
+
+.form-mention-popup-item.active,
+.form-mention-popup-item:hover {
+  background: #3d3d5c;
+}
+
+select {
+  background: #3d3d5c;
+  color: #e0e0e0;
+  border: 1px solid #55557a;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.9em;
+}
+
+input {
+  background: #1e1e2e;
+  color: #e0e0e0;
+  border: 1px solid #55557a;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 0.9em;
+  box-sizing: border-box;
+  display: block;
+  margin: 8px 0;
+  width: 100%;
+  max-width: 300px;
+}
+
+/* Same `display` vs. `[hidden]` precedence issue as `.rename-row` and
+   `.catalog-list` above -- `input`'s own `display: block` is an author
+   rule too, so it beats the `hidden` attribute's user-agent-stylesheet
+   `display: none`. Without this, the model form's "Personalizado" text
+   input rendered visible from the start regardless of its `.hidden`
+   property. */
+input[hidden] {
+  display: none;
+}
+
+input:disabled,
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+/* `display: flex` above is an author-stylesheet rule, which always wins
+   over the `hidden` attribute's own user-agent `display: none` -- same
+   issue already hit once with `.rename-row`/`.catalog-list`. Without
+   this, the modal renders open at all times regardless of the `hidden`
+   property, which is exactly the "sale siempre y no se puede cerrar"
+   bug this fixes. */
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.modal-dialog {
+  background: #26263c;
+  border-radius: 12px;
+  padding: 22px 26px 26px;
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  /* Any modal's content can end up taller than the viewport (a long
+     roster, or the create/edit form below) -- without this, .modal-
+     backdrop's vertical centering just lets it overflow past the top
+     and bottom edges instead of scrolling. */
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The create/edit agent-or-skill form's own multi-row prompt textarea
+   reads much better with real room instead of wrapping constantly --
+   same reasoning .form-card.wide already captured before this form
+   moved into a modal. */
+.modal-dialog.wide {
+  width: min(900px, calc(100vw - 32px));
+}
+
+.modal-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-dialog h3 {
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 1.3em;
+  line-height: 1;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
+.modal-close:hover {
+  background: none;
+  color: #e0e0e0;
+}
+
+.modal-dialog input {
+  margin: 0;
+  max-width: none;
+}
+
+.modal-dialog .cwd {
+  margin: -6px 0 0;
+}
+
+/* A count/status line under a modal's own heading (roster count) --
+   distinct from .modal-dialog .cwd above, which is tuned to hug a
+   specific button in "Nueva sala" and would otherwise crowd this one
+   against the heading instead of relying on the dialog's own flex gap. */
+.modal-subtitle {
+  color: #999;
+  font-size: 0.85em;
+  margin: 0;
+}
+
+.modal-button-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+/* "Apagadas" -- dimmed until you hover/enter one, unlike the live,
+   colorful session cards on the main dashboard. */
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #26263c;
+  border-radius: 8px;
+  padding: 10px 14px;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.history-row:hover {
+  opacity: 1;
+}
+
+.history-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #555;
+  flex-shrink: 0;
+}
+
+.history-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-info strong {
+  display: block;
+}
+
+.history-info .cwd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dashboard toasts: appended to <body> (see ensureToastStack), so a
+   screen navigation replacing #app's contents never deletes one
+   mid-display. Stacks bottom-right, newest on top. */
+#toast-stack {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  max-width: 340px;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #2a2a3d;
+  border: 1px solid #55557a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease,
+    filter 0.15s ease;
+}
+
+.toast:hover {
+  filter: brightness(1.15);
+}
+
+.toast.toast-fade {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* One solid color per lifecycle state, so the type reads at a glance
+   without reading the text -- same palette the rest of the app already
+   uses for similar meanings (.stop-link's amber, .danger-button's red),
+   just applied to the whole card instead of only its border. */
+.toast-working {
+  background: #2e4a7a;
+  border-color: #3d6a9c;
+}
+
+.toast-blocked {
+  background: #7a5a2e;
+  border-color: #a3803d;
+}
+
+.toast-done {
+  background: #2e6b45;
+  border-color: #3d9c5e;
+}
+
+.toast-failed {
+  background: #7a2e2e;
+  border-color: #a33d3d;
+}
+
+.toast-stopped {
+  background: #4a4a4a;
+  border-color: #666;
+}
+
+.toast-text {
+  font-size: 0.9em;
+  line-height: 1.3;
+  flex: 1;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 1.2em;
+  line-height: 1;
+  padding: 0 0 0 4px;
+  margin: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.toast-close:hover {
+  color: #e0e0e0;
+  background: none;
+}
