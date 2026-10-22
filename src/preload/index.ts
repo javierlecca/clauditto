@@ -51,6 +51,12 @@ export interface SessionHistoryEntry {
   name: string
 }
 
+export interface McpServerEntry {
+  name: string
+  target: string
+  status: string
+}
+
 export interface UsageTotals {
   inputTokens: number
   outputTokens: number
@@ -63,6 +69,8 @@ const api = {
   focusWindow: (): Promise<void> => ipcRenderer.invoke('app:focusWindow'),
   saveClipboardImage: (buffer: ArrayBuffer, mimeType: string): Promise<string> =>
     ipcRenderer.invoke('clipboard:saveImage', buffer, mimeType),
+  saveClipboardFile: (buffer: ArrayBuffer, fileName: string): Promise<string> =>
+    ipcRenderer.invoke('clipboard:saveFile', buffer, fileName),
   getSessionUsage: (cwd: string, sessionId: string): Promise<UsageTotals> =>
     ipcRenderer.invoke('usage:getForSession', cwd, sessionId),
   getTotalUsage: (): Promise<UsageTotals> => ipcRenderer.invoke('usage:getTotal'),
@@ -140,6 +148,10 @@ const api = {
     ipcRenderer.invoke('session:renameRoom', shortId, newName),
   deleteRoom: (shortId: string): Promise<void> => ipcRenderer.invoke('session:deleteRoom', shortId),
   stopRoom: (shortId: string): Promise<void> => ipcRenderer.invoke('session:stopRoom', shortId),
+  respawnRoom: (shortId: string): Promise<void> => ipcRenderer.invoke('session:respawnRoom', shortId),
+  listMcpServers: (): Promise<McpServerEntry[]> => ipcRenderer.invoke('mcp:list'),
+  addMcpServer: (rawArgs: string): Promise<void> => ipcRenderer.invoke('mcp:add', rawArgs),
+  removeMcpServer: (name: string): Promise<void> => ipcRenderer.invoke('mcp:remove', name),
   listSessionHistory: (): Promise<SessionHistoryEntry[]> => ipcRenderer.invoke('session:listHistory'),
   resumeSession: (sessionId: string, cwd: string): Promise<{ ptyId: string; pid: number }> =>
     ipcRenderer.invoke('pty:resume', sessionId, cwd),

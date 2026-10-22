@@ -106,30 +106,48 @@ export function mountTerminal(
         return
       }
       const imageItem = Array.from(items).find((item) => item.type.startsWith('image/'))
-      if (!imageItem) {
-        // No image on the clipboard -- let xterm.js's own text paste
-        // handling run exactly as before.
+      if (imageItem) {
+        event.preventDefault()
+        event.stopPropagation()
+        const file = imageItem.getAsFile()
+        if (!file) {
+          return
+        }
+        const mimeType = imageItem.type
+        void file
+          .arrayBuffer()
+          .then((buffer) => api.saveClipboardImage(buffer, mimeType))
+          // Through routeInput, not a bare forward -- an image pasted while
+          // composing a "$sala" dispatch belongs in that message (as its
+          // file path, same convention as pasting one straight into Claude
+          // Code), not leaked to this room's own Claude. Confirmed by direct
+          // user report asking whether pasting an image into a dispatch
+          // even worked -- previously it didn't, this path bypassed both
+          // interceptors entirely.
+          .then((filePath) => routeInput(filePath))
+          .catch((err) => console.error('[paste] failed to save pasted image:', err))
+        return
+      }
+      // Any other file copied in Finder (a PDF, a zip, ...) -- `items` has
+      // no image/* entry for these, but `clipboardData.files` still has
+      // the real File object (with its original name). Left alone, this
+      // falls through to xterm's own paste handling, which reads an empty
+      // text/plain string (a Finder file copy has none of those either)
+      // and forwards an empty bracketed paste -- exactly what triggers the
+      // CLI's own broken clipboard-image fallback this listener exists to
+      // avoid (see the Cmd+V comment above). Same fix, generalized: save
+      // it to a real temp file and type its path in instead.
+      const pastedFile = event.clipboardData?.files?.[0]
+      if (!pastedFile) {
         return
       }
       event.preventDefault()
       event.stopPropagation()
-      const file = imageItem.getAsFile()
-      if (!file) {
-        return
-      }
-      const mimeType = imageItem.type
-      void file
+      void pastedFile
         .arrayBuffer()
-        .then((buffer) => api.saveClipboardImage(buffer, mimeType))
-        // Through routeInput, not a bare forward -- an image pasted while
-        // composing a "$sala" dispatch belongs in that message (as its
-        // file path, same convention as pasting one straight into Claude
-        // Code), not leaked to this room's own Claude. Confirmed by direct
-        // user report asking whether pasting an image into a dispatch
-        // even worked -- previously it didn't, this path bypassed both
-        // interceptors entirely.
+        .then((buffer) => api.saveClipboardFile(buffer, pastedFile.name))
         .then((filePath) => routeInput(filePath))
-        .catch((err) => console.error('[paste] failed to save pasted image:', err))
+        .catch((err) => console.error('[paste] failed to save pasted file:', err))
     },
     { capture: true }
   )

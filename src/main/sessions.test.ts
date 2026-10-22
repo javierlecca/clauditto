@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createRoom, deleteRoom, listSessions, parseSessionsJson, stopRoom } from './sessions'
+import { createRoom, deleteRoom, listSessions, parseSessionsJson, respawnRoom, stopRoom } from './sessions'
 
 const INTERACTIVE_FIXTURE = `[
   {
@@ -287,5 +287,33 @@ describe('stopRoom', () => {
       throw new Error('boom')
     }
     await expect(stopRoom('c8bb4981', fakeExec)).rejects.toThrow('boom')
+  })
+})
+
+describe('respawnRoom', () => {
+  it('calls claude respawn <shortId>', async () => {
+    let calledArgs: string[] = []
+    const fakeExec = async (_cmd: string, args: string[]): Promise<{ stdout: string }> => {
+      calledArgs = args
+      return { stdout: '' }
+    }
+    await respawnRoom('c8bb4981', fakeExec)
+    expect(calledArgs).toEqual(['respawn', 'c8bb4981'])
+  })
+
+  it('throws a friendly error when the claude CLI is missing', async () => {
+    const fakeExec = async (): Promise<{ stdout: string }> => {
+      const err = new Error('spawn claude ENOENT') as NodeJS.ErrnoException
+      err.code = 'ENOENT'
+      throw err
+    }
+    await expect(respawnRoom('c8bb4981', fakeExec)).rejects.toThrow('claude CLI not found on PATH')
+  })
+
+  it('propagates other exec errors unchanged', async () => {
+    const fakeExec = async (): Promise<{ stdout: string }> => {
+      throw new Error('boom')
+    }
+    await expect(respawnRoom('c8bb4981', fakeExec)).rejects.toThrow('boom')
   })
 })

@@ -96,7 +96,7 @@ export async function openRoom(session: ClaudeSession, autoEnterTerminal = false
   // needs to detach an unused prewarmed process.
   let prewarmedAttachPtyId: Promise<string> | null = null
   let prewarmedAttachConsumed = false
-  if (canAttach && session.status !== 'stopped') {
+  if (canAttach && session.status !== 'stopped' && session.status !== 'done') {
     prewarmedAttachPtyId = api.attachSession(shortId as string)
     // Real errors are still surfaced later, when something actually
     // awaits this same promise (the click handler, or the Back cleanup
@@ -195,6 +195,12 @@ export async function openRoom(session: ClaudeSession, autoEnterTerminal = false
   // difference from a genuine user click, which can only ever happen
   // after the page is already fully rendered.
   let autoEnterButton: HTMLButtonElement | null = null
+  // Set below, background rooms only -- "Reiniciar sala" (in the danger
+  // zone further down) reuses this exact button's own click handler to
+  // close the now-stale terminal (pointed at the process that's about to
+  // die) and reopen a fresh one against the respawned process, instead of
+  // duplicating mountTerminal's attach wiring a second time.
+  let enterTerminalButton: HTMLButtonElement | null = null
   if (canAttach || canReattachResumed) {
     terminalCard = document.createElement('div')
     terminalCard.className = 'form-card wide'
@@ -205,13 +211,16 @@ export async function openRoom(session: ClaudeSession, autoEnterTerminal = false
 
     if (canAttach) {
       const id = shortId as string
-      // Attaching to a stopped job wakes it back up automatically, so
-      // this button doubles as "Prender" for a stopped room.
-      const enterLabel = session.status === 'stopped' ? 'Prender y entrar al terminal' : 'Entrar al terminal'
+      // Attaching to a stopped (or already-exited/"done") job wakes it
+      // back up automatically, so this button doubles as "Prender" for
+      // either one.
+      const enterLabel =
+        session.status === 'stopped' || session.status === 'done' ? 'Prender y entrar al terminal' : 'Entrar al terminal'
       const terminalToggle = document.createElement('button')
       terminalToggle.textContent = enterLabel
       terminalCard.appendChild(terminalToggle)
       terminalCard.appendChild(terminalSection)
+      enterTerminalButton = terminalToggle
 
       terminalToggle.addEventListener('click', () => {
         if (terminalCleanup) {
@@ -227,7 +236,21 @@ export async function openRoom(session: ClaudeSession, autoEnterTerminal = false
             terminalSection!,
             id,
             async () => {
-              if (prewarmedAttachPtyId) {
+              // `!prewarmedAttachConsumed` matters here, not just
+              // `prewarmedAttachPtyId` being set -- that promise stays
+              // non-null forever once created, so without this check,
+              // closing and reopening the terminal a second time in the
+              // same room visit (manually, or via "Reiniciar sala"'s own
+              // auto-reopen) replayed the SAME already-resolved ptyId
+              // from when the room first opened. That pty was long since
+              // detached (by the close above, or by the process dying
+              // under "Reiniciar sala"), so attaching to it again just
+              // sat on a dead connection -- a black terminal, with
+              // `api.getPtyBuffer` failing in the main process for every
+              // such reopen (confirmed by direct user report: repeated
+              // "Esta terminal ya no está disponible" in the main
+              // process log right after reiniciar). First-time use only.
+              if (prewarmedAttachPtyId && !prewarmedAttachConsumed) {
                 prewarmedAttachConsumed = true
                 const ptyId = await prewarmedAttachPtyId
                 // Whatever the CLI already output while nobody was
@@ -634,6 +657,83 @@ export async function openRoom(session: ClaudeSession, autoEnterTerminal = false
 
   if (canAttach) {
     const id = shortId as string
+
+    // Only meaningful while the background process is actually still
+    // running (busy/idle/waiting): `claude attach` on a live session just
+    // reconnects to that same long-running process (no config reload), so
+    // this is the only way to pick up something like a newly installed
+    // MCP server (`claude mcp add`) without losing the conversation. A
+    // stopped/done room already gets a brand-new process for free the
+    // next time it's attached/prendida, so offering this there too would
+    // just be a confusing no-op.
+    if (session.status !== 'failed' && session.status !== 'stopped' && session.status !== 'done') {
+      const restartHeading = document.createElement('h3')
+      restartHeading.className = 'card-heading'
+      restartHeading.textContent = 'Reiniciar sala'
+      dangerCard.appendChild(restartHeading)
+
+      const restartHint = document.createElement('p')
+      restartHint.textContent =
+        'Reinicia el proceso de esta sala sin perder la conversación -- útil si acabas de instalar un MCP nuevo y la sala no lo está viendo.'
+      dangerCard.appendChild(restartHint)
+
+      const restartButton = document.createElement('button')
+      restartButton.textContent = 'Reiniciar sala'
+      dangerCard.appendChild(restartButton)
+
+      const restartStatus = document.createElement('p')
+      dangerCard.appendChild(restartStatus)
+
+      restartButton.addEventListener('click', async () => {
+        const confirmed = window.confirm(
+          `¿Reiniciar la sala "${session.name}"? El proceso se reinicia (recarga MCPs y configuración) pero la conversación se mantiene.`
+        )
+        if (!confirmed) {
+          return
+        }
+        restartButton.disabled = true
+        restartStatus.className = ''
+        restartStatus.textContent = 'Reiniciando…'
+        // The terminal (if open) is a `claude attach` client pointed at
+        // the process that's about to die underneath it -- close it
+        // first via the same button "Entrar al terminal" itself uses, so
+        // it doesn't sit there confused. If it was never opened, there
+        // may still be an unconsumed pre-warmed attach connection from
+        // when this room was opened (see prewarmedAttachPtyId's own
+        // comment) pointed at that same dying process -- detach it too.
+        const wasTerminalOpen = terminalCleanup !== null
+        if (wasTerminalOpen) {
+          enterTerminalButton?.click()
+        } else if (!prewarmedAttachConsumed) {
+          // Marking it consumed here too (not just detaching it) matters:
+          // without this, clicking "Entrar al terminal" afterward still
+          // saw an unconsumed prewarmedAttachPtyId and replayed this
+          // exact ptyId -- now detached and pointed at the process that
+          // just died under "Reiniciar sala" -- instead of attaching
+          // fresh (confirmed by direct user report: black terminal, same
+          // "Esta terminal ya no está disponible" spam as the already-
+          // fixed open-terminal case, but reached via this other path).
+          prewarmedAttachConsumed = true
+          prewarmedAttachPtyId?.then((ptyId) => api.detachPty(ptyId)).catch(() => {})
+        }
+        try {
+          await api.respawnRoom(id)
+          dangerBackdrop.hidden = true
+          restartStatus.textContent = ''
+          restartButton.disabled = false
+          // Stay in this room instead of bouncing back to the dashboard
+          // the way Apagar/Eliminar do -- reopen against the freshly
+          // respawned process.
+          if (wasTerminalOpen) {
+            enterTerminalButton?.click()
+          }
+        } catch (error) {
+          restartStatus.className = 'error'
+          restartStatus.textContent = (error as Error).message
+          restartButton.disabled = false
+        }
+      })
+    }
 
     // A "failed" session has no live process left, so there's nothing
     // left to stop -- same gate as rename/dispatch above.

@@ -81,12 +81,15 @@ export function createRoomScene(session: ClaudeSession, agentNames: string[]): H
   const scene = document.createElement('div')
   scene.className = 'room-scene'
   // A background room the CLI itself reports as "stopped" (via
-  // claude stop) is off just as much as a closed history entry --
-  // give it the same grayscale/frozen treatment instead of a full-color
-  // scene with only a small, easy-to-miss gray status dot as the only
-  // sign anything changed (a real gap: stopping a room worked
-  // correctly but looked exactly like it hadn't).
-  if (session.status === 'stopped' || session.status === 'closed') {
+  // claude stop) or "done" (its last task finished and the process
+  // already exited on its own -- `claude stop` is a no-op on these,
+  // confirmed directly: it prints success but the status never flips to
+  // "stopped") is off just as much as a closed history entry -- give it
+  // the same grayscale/frozen treatment instead of a full-color scene
+  // with only a small, easy-to-miss gray status dot as the only sign
+  // anything changed (a real gap: stopping a room worked correctly but
+  // looked exactly like it hadn't).
+  if (session.status === 'stopped' || session.status === 'done' || session.status === 'closed') {
     scene.classList.add('is-off')
   }
 

@@ -324,7 +324,7 @@ export function createSessionCard(session: ClaudeSession, agentNames: string[]):
       ownedNote.textContent = 'Reanudada'
       ownedNote.title = 'Sesión reanudada por esta app — sigue corriendo en segundo plano.'
       titleRow.appendChild(ownedNote)
-    } else if (session.status === 'stopped') {
+    } else if (session.status === 'stopped' || session.status === 'done') {
       const stoppedNote = document.createElement('span')
       stoppedNote.className = 'title-note'
       stoppedNote.textContent = 'Apagada'
@@ -472,11 +472,11 @@ export function createSessionCard(session: ClaudeSession, agentNames: string[]):
   // this button did, which was confusing).
   const actionButton = document.createElement('button')
   actionButton.className = 'enter-link'
-  if (canAttach && session.status === 'stopped') {
-    // `claude attach` on a stopped job wakes it back up automatically
-    // (confirmed directly: "Waking session ..." on attach) -- same
-    // underlying action as "Enter →", but "Prender" sets the right
-    // expectation that this actually turns it back on.
+  if (canAttach && (session.status === 'stopped' || session.status === 'done')) {
+    // `claude attach` on a stopped (or already-exited/"done") job wakes
+    // it back up automatically (confirmed directly: "Waking session ..."
+    // on attach) -- same underlying action as "Enter →", but "Prender"
+    // sets the right expectation that this actually turns it back on.
     actionButton.textContent = 'Prender →'
   } else if (canAttach || canReattachResumed) {
     actionButton.textContent = 'Enter →'

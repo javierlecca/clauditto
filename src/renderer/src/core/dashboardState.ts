@@ -76,6 +76,25 @@ export interface KeyValueStorage {
   setItem(key: string, value: string): void
 }
 
+// A room with no live process left -- same "stopped"/"done" bucket
+// sessionCard.ts and roomScene.ts already gray out and label "Apagada"
+// (see their own comments: "done" is a background job that finished its
+// last task and exited on its own, just as off as one explicitly paused
+// via claude stop), plus "failed" (a dead session with nothing left to
+// attach to).
+const OFF_STATUSES = new Set(['stopped', 'done', 'failed'])
+
+// Dashboard order was plain creation order (whatever `claude agents --json
+// --all` returns) -- confirmed by direct user report that it reads as
+// random once a few rooms are off, since an off room created recently
+// sits above a live one created earlier. `Array.prototype.sort` is stable
+// (guaranteed since ES2019), so this only moves off rooms down -- it
+// never reorders two rooms within the same on/off group relative to each
+// other.
+export function sortSessionsByLiveness(sessions: ClaudeSession[]): ClaudeSession[] {
+  return [...sessions].sort((a, b) => Number(OFF_STATUSES.has(a.status)) - Number(OFF_STATUSES.has(b.status)))
+}
+
 export const ACKNOWLEDGED_BLOCKED_STORAGE_KEY = 'claudeui.acknowledgedBlocked'
 
 // Rooms whose current "blocked" state the user has already gone to deal

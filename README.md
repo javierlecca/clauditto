@@ -7,7 +7,7 @@ all from one dashboard.
 
 ![Clauditto dashboard](docs/img/dashboard.png)
 
-**[Download for Mac / Windows →](#) · [Watch all 12 features on video →](#)**
+**[Download for Mac / Windows →](#) · [Watch all 15 features on video →](#)**
 
 ## Why it exists
 
@@ -35,6 +35,12 @@ Full detail, with a video for each one, in
 - **History**: closed sessions stay right on the dashboard, ready to resume
   with one click.
 - **Agent and skill catalogs**, with installation straight from GitHub.
+- **MCP server manager**: add/remove MCP servers by pasting the real
+  `claude mcp add ...` command, always registered globally for every room.
+- **Agent meetings (`/meet`)**: convene a room's assigned agents into a
+  structured, multi-round discussion, right from its terminal.
+- **Restart room**: reload MCPs and config for a live room without losing
+  the conversation — no more deleting and recreating it.
 - **Claude Code login and folder-trust prompts**, resolved from inside the
   app instead of sending you to a separate terminal.
 

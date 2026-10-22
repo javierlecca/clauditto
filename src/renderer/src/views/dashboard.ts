@@ -15,6 +15,7 @@ import {
   effectiveLifecycleState,
   lastKnownSessionState,
   persistAcknowledgedBlocked,
+  sortSessionsByLiveness,
   unseenSessionChanges
 } from '../core/dashboardState'
 import { buildDispatchResultSummary, dispatchMessageToRoom, pendingDispatches, sendMessageToAddress } from '../core/dispatch'
@@ -24,6 +25,7 @@ import { TOAST_STATE_CLASS, showToast } from './toasts'
 import { createSessionCard, refreshBlockedPeekButtonInDom, refreshCardBadgeInDom } from './sessionCard'
 import { createHistoryCard } from './historyCard'
 import { openAgentsScreen, openSkillsScreen } from './catalogScreen'
+import { openMcpScreen } from './mcpScreen'
 import { openRoom } from './roomDetail'
 import type { ClaudeSession, RoomTarget, SessionHistoryEntry } from '../types'
 
@@ -871,7 +873,7 @@ export async function renderSessionList(): Promise<void> {
 
   let sessions: ClaudeSession[]
   try {
-    sessions = await api.listSessions()
+    sessions = sortSessionsByLiveness(await api.listSessions())
   } catch (error) {
     const errorEl = document.createElement('p')
     errorEl.className = 'error'
@@ -943,6 +945,7 @@ export async function renderSessionList(): Promise<void> {
   nav.className = 'nav-bar'
   nav.appendChild(createNavButton('Agentes', openAgentsScreen))
   nav.appendChild(createNavButton('Skills', openSkillsScreen))
+  nav.appendChild(createNavButton('MCPs', openMcpScreen))
   nav.appendChild(newRoomButton)
   // Only worth offering when there's at least one eligible room to pick as
   // a target -- an empty picker with nothing to check is just noise. Same

@@ -150,3 +150,24 @@ export async function stopRoom(shortId: string, exec: ExecFn = defaultExec): Pro
     throw error
   }
 }
+
+// Restarts a still-live background session's own process in place (same
+// conversation, same short id) -- confirmed via `claude respawn --help`.
+// Needed because a long-running background job only reads MCP server
+// config (`claude mcp add`/`remove`) at process startup: `claude attach`
+// on a busy/idle session just reconnects to that same already-running
+// process (see its own --help: "the session keeps running either way"),
+// so a newly installed MCP never shows up there. Deleting and recreating
+// the room (the workaround before this existed) also forces a fresh
+// process, but throws away the room/conversation entirely to do it --
+// this restarts the process without losing either.
+export async function respawnRoom(shortId: string, exec: ExecFn = defaultExec): Promise<void> {
+  try {
+    await exec('claude', ['respawn', shortId])
+  } catch (error) {
+    if (isClaudeNotFoundError(error)) {
+      throw new Error('claude CLI not found on PATH. Install Claude Code first.')
+    }
+    throw error
+  }
+}

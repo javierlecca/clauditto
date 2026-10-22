@@ -19,3 +19,6 @@ resources/mcp-bridge-dist/
 # Stray debris from an environment-variable bug (a literal "undefined" path) -- not project content.
 undefined/
 SESSION_STATE.md
+
+# Internal release runbook (VM IPs, transfer workarounds) -- ops notes, not for the public repo.
+docs/RELEASE.md

@@ -4,7 +4,8 @@ import {
   describeLifecycleChange,
   effectiveLifecycleState,
   loadAcknowledgedBlocked,
-  persistAcknowledgedBlocked
+  persistAcknowledgedBlocked,
+  sortSessionsByLiveness
 } from './dashboardState'
 import type { ClaudeSession } from '../types'
 
@@ -121,5 +122,37 @@ describe('persistAcknowledgedBlocked', () => {
     const storage = fakeStorage()
     persistAcknowledgedBlocked(new Set(['x']), storage)
     expect(loadAcknowledgedBlocked(storage)).toEqual(new Set(['x']))
+  })
+})
+
+describe('sortSessionsByLiveness', () => {
+  it('moves off rooms (stopped/done/failed) after live ones', () => {
+    const live = buildSession({ sessionId: 'live', status: 'idle' })
+    const stopped = buildSession({ sessionId: 'stopped', status: 'stopped' })
+    const done = buildSession({ sessionId: 'done', status: 'done' })
+    const failed = buildSession({ sessionId: 'failed', status: 'failed' })
+
+    const sorted = sortSessionsByLiveness([stopped, done, live, failed])
+
+    expect(sorted.map((s) => s.sessionId)).toEqual(['live', 'stopped', 'done', 'failed'])
+  })
+
+  it('does not reorder two rooms within the same on/off group', () => {
+    const busy = buildSession({ sessionId: 'busy', status: 'busy' })
+    const idle = buildSession({ sessionId: 'idle', status: 'idle' })
+    const olderStopped = buildSession({ sessionId: 'older-stopped', status: 'stopped' })
+    const newerDone = buildSession({ sessionId: 'newer-done', status: 'done' })
+
+    const sorted = sortSessionsByLiveness([busy, olderStopped, idle, newerDone])
+
+    expect(sorted.map((s) => s.sessionId)).toEqual(['busy', 'idle', 'older-stopped', 'newer-done'])
+  })
+
+  it('returns a new array instead of mutating the input', () => {
+    const input = [buildSession({ sessionId: 'a', status: 'stopped' }), buildSession({ sessionId: 'b', status: 'idle' })]
+    const sorted = sortSessionsByLiveness(input)
+
+    expect(sorted).not.toBe(input)
+    expect(input.map((s) => s.sessionId)).toEqual(['a', 'b'])
   })
 })

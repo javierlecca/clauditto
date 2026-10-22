@@ -170,3 +170,57 @@ every room/history card, plus a running total on the dashboard.
   in.
 - If a folder was never confirmed as trusted for Claude Code, the same
   kind of hidden terminal answers the trust prompt for you (see section 2).
+
+## 13. MCP servers
+
+"MCPs" screen (nav bar), same layout as the agent/skill catalogs:
+
+- List of configured MCP servers: name, command/URL, and live connection
+  status (same wording `claude mcp list` prints — "Connected", "Needs
+  authentication", "Failed to connect", etc.).
+- **"Agregar servidor MCP"** (Add MCP server): one field — paste the
+  command the way you'd type it in a real terminal, e.g.
+  `claude mcp add --transport http miro https://mcp.miro.com`. You can
+  include the leading `claude mcp add` or leave it off, either works.
+- Always registers **globally** (`--scope user`), available to every room
+  on the machine, regardless of any `--scope`/`-s` you typed — if you
+  need a project-local one instead, add it from a real terminal.
+- **"Quitar"** (Remove) per server.
+- The list always reflects what's genuinely global: it's read/written from
+  the user's home directory rather than wherever the app happens to be
+  running from, so a server added locally to some unrelated project folder
+  never shows up here as if it were global.
+
+## 14. Agent meetings (`/meet`)
+
+A native Claude Code slash command the app installs for you
+(`~/.claude/commands/meet.md`) — type `/meet <topic>` inside a room's
+terminal (section 5), no separate screen:
+
+- Convenes only the agents assigned to **that specific room's roster**
+  (see "Gestionar agentes", section 4) as subagents for a round; each one
+  speaks once, in no fixed order.
+- After a round, shows what each agent said, then asks: **"1 · Seguir"**
+  (another round, same agents) or **"2 · Cerrar la reunión"** (summarizes
+  the meeting back in the main conversation, so you can follow up with
+  specific agents afterward).
+- Choosing to continue first asks whether you want to leave a comment
+  before the next round opens — your comment (or lack of one) becomes
+  that round's starting context.
+- If the room has no agents assigned yet, it tells you so and stops
+  instead of convening an empty meeting.
+
+## 15. Restart room
+
+In "Gestionar sala" (section 4), above "Apagar sala", a **"Reiniciar
+sala"** button for any live background room:
+
+- Fixes the problem of installing a new MCP server (section 13) while a
+  room is already running — its `claude` process only reads MCP config
+  at startup, so it won't see the new server until restarted.
+- Confirms first: `¿Reiniciar la sala "<name>"? El proceso se reinicia
+  (recarga MCPs y configuración) pero la conversación se mantiene.`
+- Runs `claude respawn <id>` under the hood — same session/conversation,
+  fresh process. If the terminal was open, it closes and reopens itself
+  against the respawned process; no need to delete and recreate the room
+  like before.

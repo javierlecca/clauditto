@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { createRoom, deleteRoom, listSessions, stopRoom } from './sessions'
+import { basename, dirname, join } from 'node:path'
+import { addMcpServer, listMcpServers, removeMcpServer } from './mcp'
+import { createRoom, deleteRoom, listSessions, respawnRoom, stopRoom } from './sessions'
 import {
   createAttachPty,
   createLoginPty,
@@ -38,6 +39,7 @@ import {
   scanAgentCatalog
 } from './roster'
 import { createUserAgent, deleteUserAgent, listUserAgents, readUserAgentBody, updateUserAgent } from './agents'
+import { installMeetCommand, syncAllRosterFiles, writeRoomRosterFile } from './roomRosters'
 import {
   attachSkillFile,
   createUserSkill,
@@ -119,6 +121,9 @@ function migrateLegacyRosterDb(newDbPath: string): void {
 const rosterDbPath = join(app.getPath('userData'), 'clauditto.db')
 migrateLegacyRosterDb(rosterDbPath)
 const db = openRosterDb(rosterDbPath)
+const rostersDir = join(app.getPath('userData'), 'rooms')
+syncAllRosterFiles(db, rostersDir)
+installMeetCommand(join(homedir(), '.claude', 'commands'), rostersDir)
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -194,6 +199,24 @@ ipcMain.handle('clipboard:saveImage', async (_event, buffer: ArrayBuffer, mimeTy
     throw new Error('Invalid arguments')
   }
   return writeImageBlobToTempFile(new Blob([buffer], { type: mimeType }), mimeType)
+})
+
+// Cmd+V on an actual file copied in Finder (not a raw image paste): same
+// bug, different trigger -- `clipboardData.items` has no image/* entry
+// for e.g. a copied PDF or zip, so the paste listener above lets it fall
+// through to xterm's own handling, which reads an empty text/plain string
+// (a Finder file copy has none) and forwards an empty bracketed paste --
+// exactly what triggers the CLI's own broken clipboard-image fallback
+// above. This keeps the file's real name (clipboardData.files has it)
+// instead of guessing an extension from a MIME type.
+ipcMain.handle('clipboard:saveFile', async (_event, buffer: ArrayBuffer, fileName: string) => {
+  if (!(buffer instanceof ArrayBuffer) || typeof fileName !== 'string') {
+    throw new Error('Invalid arguments')
+  }
+  const safeName = basename(fileName) || 'archivo'
+  const filePath = join(tmpdir(), `clauditto-paste-${randomUUID()}-${safeName}`)
+  await writeFile(filePath, Buffer.from(buffer))
+  return filePath
 })
 
 // Ctrl+V path (the CLI's own documented shortcut, kept as a fallback for
@@ -384,6 +407,7 @@ ipcMain.handle(
       throw new Error('Invalid agent path')
     }
     addRosterEntry(db, roomSessionId, agentName, agentScope, agentPath)
+    writeRoomRosterFile(db, rostersDir, roomSessionId)
   }
 )
 
@@ -392,6 +416,7 @@ ipcMain.handle('roster:remove', (_event, roomSessionId: string, agentPath: strin
     throw new Error('Invalid arguments')
   }
   removeRosterEntry(db, roomSessionId, agentPath)
+  writeRoomRosterFile(db, rostersDir, roomSessionId)
 })
 
 ipcMain.handle('agents:listUser', () => {
@@ -769,6 +794,40 @@ ipcMain.handle('session:stopRoom', async (_event, shortId: string) => {
   } finally {
     inFlightDispatches.delete(shortId)
   }
+})
+
+ipcMain.handle('session:respawnRoom', async (_event, shortId: string) => {
+  if (typeof shortId !== 'string' || !SHORT_ID_PATTERN.test(shortId)) {
+    throw new Error('Invalid session id')
+  }
+  // Same in-flight guard as stop/delete/rename/dispatch.
+  if (inFlightDispatches.has(shortId)) {
+    throw new Error('Ya se está enviando una acción a esta sala — espera a que termine.')
+  }
+  inFlightDispatches.add(shortId)
+  try {
+    await respawnRoom(shortId)
+  } finally {
+    inFlightDispatches.delete(shortId)
+  }
+})
+
+ipcMain.handle('mcp:list', () => {
+  return listMcpServers()
+})
+
+ipcMain.handle('mcp:add', (_event, rawArgs: string) => {
+  if (typeof rawArgs !== 'string') {
+    throw new Error('Invalid arguments')
+  }
+  return addMcpServer(rawArgs)
+})
+
+ipcMain.handle('mcp:remove', (_event, name: string) => {
+  if (typeof name !== 'string') {
+    throw new Error('Invalid arguments')
+  }
+  return removeMcpServer(name)
 })
 
 ipcMain.handle('pty:attach', (_event, shortId: string) => {
